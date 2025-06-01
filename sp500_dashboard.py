@@ -35,25 +35,65 @@ def download_stock_data(symbol, start_date, end_date):
         st.error(f"Error downloading data for {symbol}: {str(e)}")
         return None
 
-def plot_stock_data(df, symbol):
-    """Create an interactive plot using Plotly."""
-    fig = go.Figure()
+def calculate_macd(df, fast=12, slow=26, signal=9):
+    """Calculate MACD and Signal line."""
+    exp1 = df['close'].ewm(span=fast, adjust=False).mean()
+    exp2 = df['close'].ewm(span=slow, adjust=False).mean()
+    macd = exp1 - exp2
+    signal_line = macd.ewm(span=signal, adjust=False).mean()
+    return macd, signal_line
+
+def plot_stock_data(df, symbol, indicators=None, voo_df=None, macd_tuple=None):
+    """Create an interactive plot using Plotly, with optional indicators."""
+    from plotly.subplots import make_subplots
+    has_macd = indicators and "MACD" in indicators and macd_tuple is not None
+    rows = 2 if has_macd else 1
+    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True,
+                        row_heights=[0.7, 0.3] if has_macd else [1.0],
+                        vertical_spacing=0.05 if has_macd else 0.0)
+    # Main candlestick
     fig.add_trace(go.Candlestick(
         x=df.index,
         open=df['open'],
         high=df['high'],
         low=df['low'],
         close=df['close'],
-        name='OHLC'
-    ))
-    
+        name=f'{symbol} OHLC'
+    ), row=1, col=1)
+    # VOO overlay
+    if indicators and "VOO" in indicators and voo_df is not None:
+        fig.add_trace(go.Scatter(
+            x=voo_df.index,
+            y=voo_df['close'],
+            mode='lines',
+            name='VOO Close',
+            line=dict(color='orange')
+        ), row=1, col=1)
+    # MACD subplot
+    if has_macd:
+        macd, signal_line = macd_tuple
+        fig.add_trace(go.Scatter(
+            x=df.index,
+            y=macd,
+            mode='lines',
+            name='MACD',
+            line=dict(color='cyan')
+        ), row=2, col=1)
+        fig.add_trace(go.Scatter(
+            x=df.index,
+            y=signal_line,
+            mode='lines',
+            name='Signal',
+            line=dict(color='magenta')
+        ), row=2, col=1)
+        fig.update_yaxes(title_text="MACD", row=2, col=1)
     fig.update_layout(
         title=f'{symbol} Stock Price',
         yaxis_title='Price (USD)',
         xaxis_title='Date',
-        template='plotly_dark'
+        template='plotly_dark',
+        height=700 if has_macd else 500
     )
-    
     return fig
 
 # Set page config
@@ -80,6 +120,12 @@ symbols = get_sp500_symbols()
 # Symbol selection
 selected_symbol = st.sidebar.selectbox("Select Stock", symbols)
 
+# Indicator selection (below stock selector)
+indicator_options = ["VOO", "MACD"]
+selected_indicators = st.sidebar.multiselect(
+    "Show Trading Indicators", indicator_options, default=[]
+)
+
 # Download and display data
 if selected_symbol:
     st.subheader(f"Stock Data for {selected_symbol}")
@@ -87,9 +133,19 @@ if selected_symbol:
     # Download data
     df = download_stock_data(selected_symbol, start_date, end_date)
     
+    # Download VOO data if needed
+    voo_df = None
+    if "VOO" in selected_indicators:
+        voo_df = download_stock_data("VOO", start_date, end_date)
+    
+    # Calculate MACD if needed
+    macd_tuple = None
+    if "MACD" in selected_indicators and df is not None and not df.empty:
+        macd_tuple = calculate_macd(df)
+    
     if df is not None and not df.empty:
         # Display the plot
-        fig = plot_stock_data(df, selected_symbol)
+        fig = plot_stock_data(df, selected_symbol, indicators=selected_indicators, voo_df=voo_df, macd_tuple=macd_tuple)
         st.plotly_chart(fig, use_container_width=True)
         
         # Display raw data
