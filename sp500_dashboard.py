@@ -1,10 +1,10 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from yahooquery import Ticker  # <-- Use yahooquery
 
 def get_sp500_symbols():
     """Get the list of S&P 500 symbols from Wikipedia."""
@@ -19,10 +19,17 @@ def get_sp500_symbols():
     return symbols
 
 def download_stock_data(symbol, start_date, end_date):
-    """Download stock data for a given symbol and date range."""
+    """Download stock data for a given symbol and date range using yahooquery."""
     try:
-        stock = yf.Ticker(symbol)
-        df = stock.history(start=start_date, end=end_date)
+        ticker = Ticker(symbol)
+        # yahooquery expects dates as strings in 'YYYY-MM-DD' format
+        df = ticker.history(start=str(start_date), end=str(end_date))
+        if df.empty:
+            return None
+        # If multiple symbols, df is multi-indexed; select only the symbol
+        if isinstance(df.index, pd.MultiIndex):
+            df = df.xs(symbol)
+        df.index = pd.to_datetime(df.index)
         return df
     except Exception as e:
         st.error(f"Error downloading data for {symbol}: {str(e)}")
@@ -33,10 +40,10 @@ def plot_stock_data(df, symbol):
     fig = go.Figure()
     fig.add_trace(go.Candlestick(
         x=df.index,
-        open=df['Open'],
-        high=df['High'],
-        low=df['Low'],
-        close=df['Close'],
+        open=df['open'],
+        high=df['high'],
+        low=df['low'],
+        close=df['close'],
         name='OHLC'
     ))
     
@@ -59,7 +66,7 @@ st.title("S&P 500 Stock Dashboard")
 st.sidebar.header("Settings")
 
 # Date range selection
-end_date = datetime.now()
+end_date = date.today()
 start_date = end_date - timedelta(days=365)
 col1, col2 = st.sidebar.columns(2)
 with col1:
@@ -91,7 +98,7 @@ if selected_symbol:
         
         # Display statistics
         st.subheader("Statistics")
-        stats = df['Close'].describe()
+        stats = df['close'].describe()
         st.write(stats)
     else:
-        st.error("No data available for the selected period.") 
+        st.error("No data available for the selected period.")
