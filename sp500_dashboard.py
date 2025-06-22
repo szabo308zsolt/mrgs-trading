@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, date
 from yahooquery import Ticker  # <-- Use yahooquery
+from metrics import calculate_macd, calculate_vwap  # <-- Import from metrics.py
 
 def get_sp500_symbols():
     """Get the list of S&P 500 symbols from Wikipedia."""
@@ -35,15 +36,7 @@ def download_stock_data(symbol, start_date, end_date):
         st.error(f"Error downloading data for {symbol}: {str(e)}")
         return None
 
-def calculate_macd(df, fast=12, slow=26, signal=9):
-    """Calculate MACD and Signal line."""
-    exp1 = df['close'].ewm(span=fast, adjust=False).mean()
-    exp2 = df['close'].ewm(span=slow, adjust=False).mean()
-    macd = exp1 - exp2
-    signal_line = macd.ewm(span=signal, adjust=False).mean()
-    return macd, signal_line
-
-def plot_stock_data(df, symbol, indicators=None, voo_df=None, macd_tuple=None):
+def plot_stock_data(df, symbol, indicators=None, voo_df=None, macd_tuple=None, vwap=None):
     """Create an interactive plot using Plotly, with optional indicators."""
     from plotly.subplots import make_subplots
     has_macd = indicators and "MACD" in indicators and macd_tuple is not None
@@ -60,14 +53,14 @@ def plot_stock_data(df, symbol, indicators=None, voo_df=None, macd_tuple=None):
         close=df['close'],
         name=f'{symbol} OHLC'
     ), row=1, col=1)
-    # VOO overlay
-    if indicators and "VOO" in indicators and voo_df is not None:
+    # VWAP overlay
+    if indicators and "VWAP" in indicators and vwap is not None:
         fig.add_trace(go.Scatter(
-            x=voo_df.index,
-            y=voo_df['close'],
+            x=df.index,
+            y=vwap,
             mode='lines',
-            name='VOO Close',
-            line=dict(color='orange')
+            name='VWAP',
+            line=dict(color='orange', width=2)
         ), row=1, col=1)
     # MACD subplot
     if has_macd:
@@ -121,7 +114,7 @@ symbols = get_sp500_symbols()
 selected_symbol = st.sidebar.selectbox("Select Stock", symbols)
 
 # Indicator selection (below stock selector)
-indicator_options = ["VOO", "MACD"]
+indicator_options = ["MACD", "VWAP"] 
 selected_indicators = st.sidebar.multiselect(
     "Show Trading Indicators", indicator_options, default=[]
 )
@@ -133,10 +126,10 @@ if selected_symbol:
     # Download data
     df = download_stock_data(selected_symbol, start_date, end_date)
     
-    # Download VOO data if needed
-    voo_df = None
-    if "VOO" in selected_indicators:
-        voo_df = download_stock_data("VOO", start_date, end_date)
+    # Calculate VWAP if needed
+    vwap = None
+    if "VWAP" in selected_indicators and df is not None and not df.empty:
+        vwap = calculate_vwap(df)
     
     # Calculate MACD if needed
     macd_tuple = None
@@ -145,7 +138,7 @@ if selected_symbol:
     
     if df is not None and not df.empty:
         # Display the plot
-        fig = plot_stock_data(df, selected_symbol, indicators=selected_indicators, voo_df=voo_df, macd_tuple=macd_tuple)
+        fig = plot_stock_data(df, selected_symbol, indicators=selected_indicators, voo_df=None, macd_tuple=macd_tuple, vwap=vwap)
         st.plotly_chart(fig, use_container_width=True)
         
         # Display raw data
