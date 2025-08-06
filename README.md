@@ -31,6 +31,12 @@ The application will open in your default web browser. You can:
 2. Choose a stock from the S&P 500 list
 3. View the interactive chart, raw data, and statistics
 
+## Project Structure
+
+- `sp500_dashboard.py` - Main Streamlit app
+- `metrics.py` - Calculation functions for indicators
+- `data/` - Folder for storing downloaded or cached stock data
+
 ## Dependencies
 
 - streamlit
@@ -39,3 +45,11 @@ The application will open in your default web browser. You can:
 - plotly
 - requests
 - beautifulsoup4 
+
+## TODO
+
+- Add ability to save file that it's downloaded to a csv file. 
+- Add ability to read from the csv file when it's available, and only download new data incrementally
+- Add ability to download all data from the past at once, keeping the downloads incremental
+- Add ability to display a metric next to the daily data
+- Add ability to
